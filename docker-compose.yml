@@ -1,0 +1,29 @@
+services:
+  twitch-alert-overlay:
+    build: .
+    container_name: twitch-alert-overlay
+    restart: unless-stopped
+    networks:
+      - n8n-network
+    expose:
+      - "3000"
+    environment:
+      HOST: 0.0.0.0
+      PORT: 3000
+      ALERTS_DIR: /app/alerts
+    volumes:
+      - ./alerts:/app/alerts:ro
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: "${N8N_NETWORK:-n8n-network}"
+      traefik.http.routers.twitch-alert-overlay.entrypoints: "${TRAEFIK_ENTRYPOINT:-websecure}"
+      traefik.http.routers.twitch-alert-overlay.rule: "Host(`${ALERT_OVERLAY_HOST:-alerts.example.com}`) && (Path(`/overlay/alerts`) || Path(`/overlay/alerts/`) || Path(`/overlay/alerts/events`) || Path(`/overlay/alerts/events/`) || Path(`/overlay/alerts/webhook`) || Path(`/overlay/alerts/webhook/`) || PathPrefix(`/overlay/alerts/assets/`) || PathPrefix(`/overlay/alerts/media/`))"
+      traefik.http.routers.twitch-alert-overlay.priority: "100"
+      traefik.http.routers.twitch-alert-overlay.tls: "true"
+      traefik.http.routers.twitch-alert-overlay.tls.certresolver: "${TRAEFIK_CERT_RESOLVER:-letsencrypt}"
+      traefik.http.services.twitch-alert-overlay.loadbalancer.server.port: "3000"
+
+networks:
+  n8n-network:
+    external: true
+    name: "${N8N_NETWORK:-n8n-network}"

@@ -1,0 +1,322 @@
+#!/usr/bin/env python3
+import json
+import mimetypes
+import os
+import queue
+import threading
+import time
+import uuid
+from http import HTTPStatus
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+from urllib.parse import quote, unquote, urlparse
+
+
+ROOT_DIR = Path(__file__).resolve().parent
+PUBLIC_DIR = ROOT_DIR / "public"
+ALERTS_DIR = Path(os.environ.get("ALERTS_DIR", ROOT_DIR / "alerts")).resolve()
+HOST = os.environ.get("HOST", "0.0.0.0")
+PORT = int(os.environ.get("PORT", os.environ.get("OBS_OVERLAY_PORT", "3000")))
+MAX_BODY_BYTES = 1024 * 1024
+OVERLAY_PATH = "/overlay/alerts"
+ASSET_PATH = f"{OVERLAY_PATH}/assets"
+EVENTS_PATH = f"{OVERLAY_PATH}/events"
+MEDIA_PATH = f"{OVERLAY_PATH}/media"
+API_FILES_PATH = f"{OVERLAY_PATH}/api/files"
+HEALTH_PATH = f"{OVERLAY_PATH}/health"
+WEBHOOK_PATH = f"{OVERLAY_PATH}/webhook"
+
+clients = set()
+clients_lock = threading.Lock()
+
+
+def json_response(handler, status, payload):
+    body = json.dumps(payload).encode("utf-8")
+    handler.send_response(status)
+    handler.send_header("Content-Type", "application/json; charset=utf-8")
+    handler.send_header("Content-Length", str(len(body)))
+    handler.end_headers()
+    handler.wfile.write(body)
+
+
+def error_response(handler, status, message):
+    json_response(handler, status, {"ok": False, "error": message})
+
+
+def redirect(handler, location):
+    handler.send_response(HTTPStatus.FOUND)
+    handler.send_header("Location", location)
+    handler.end_headers()
+
+
+def safe_webm_name(value):
+    if not isinstance(value, str):
+        return None
+
+    name = value.strip()
+    if not name or name != Path(name).name:
+        return None
+
+    if Path(name).suffix.lower() != ".webm":
+        return None
+
+    return name
+
+
+def resolve_alert_file(value):
+    name = safe_webm_name(value)
+    if not name:
+        return None
+
+    file_path = (ALERTS_DIR / name).resolve()
+    try:
+        file_path.relative_to(ALERTS_DIR)
+    except ValueError:
+        return None
+
+    return name, file_path
+
+
+def list_alert_files():
+    if not ALERTS_DIR.exists():
+        return []
+
+    return sorted(
+        entry.name
+        for entry in ALERTS_DIR.iterdir()
+        if entry.is_file() and entry.suffix.lower() == ".webm"
+    )
+
+
+def broadcast(event_type, payload):
+    message = f"event: {event_type}\ndata: {json.dumps(payload)}\n\n"
+    encoded = message.encode("utf-8")
+
+    with clients_lock:
+        targets = list(clients)
+
+    for client in targets:
+        try:
+            client.put_nowait(encoded)
+        except queue.Full:
+            with clients_lock:
+                clients.discard(client)
+
+
+def heartbeat():
+    while True:
+        time.sleep(25)
+        broadcast("ping", {"now": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())})
+
+
+class OverlayHandler(BaseHTTPRequestHandler):
+    server_version = "TwitchAlertOverlay/0.1"
+
+    def log_message(self, fmt, *args):
+        print("%s - - [%s] %s" % (self.address_string(), self.log_date_time_string(), fmt % args))
+
+    def do_GET(self):
+        parsed = urlparse(self.path)
+        path = parsed.path.rstrip("/") or "/"
+
+        if path == "/":
+            redirect(self, OVERLAY_PATH)
+            return
+
+        if path in ("/health", HEALTH_PATH):
+            json_response(self, HTTPStatus.OK, {"ok": True})
+            return
+
+        if path in ("/api/files", API_FILES_PATH):
+            json_response(self, HTTPStatus.OK, {"ok": True, "files": list_alert_files()})
+            return
+
+        if path == OVERLAY_PATH:
+            self.serve_public_file(PUBLIC_DIR / "overlay.html")
+            return
+
+        if path == EVENTS_PATH:
+            self.handle_events()
+            return
+
+        if path.startswith(f"{MEDIA_PATH}/"):
+            self.serve_alert(path)
+            return
+
+        if path.startswith(f"{ASSET_PATH}/"):
+            self.serve_asset(path)
+            return
+
+        error_response(self, HTTPStatus.NOT_FOUND, "Endpoint not found.")
+
+    def do_POST(self):
+        parsed = urlparse(self.path)
+        path = parsed.path.rstrip("/") or "/"
+        if path not in ("/webhook", WEBHOOK_PATH):
+            error_response(self, HTTPStatus.NOT_FOUND, "Endpoint not found.")
+            return
+
+        self.handle_webhook()
+
+    def handle_events(self):
+        self.send_response(HTTPStatus.OK)
+        self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+        self.send_header("Cache-Control", "no-cache, no-transform")
+        self.send_header("Connection", "keep-alive")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+
+        client = queue.Queue(maxsize=100)
+        with clients_lock:
+            clients.add(client)
+
+        client.put(b'event: ready\ndata: {"ok": true}\n\n')
+
+        try:
+            while True:
+                self.wfile.write(client.get())
+                self.wfile.flush()
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+        finally:
+            with clients_lock:
+                clients.discard(client)
+
+    def handle_webhook(self):
+        content_length = self.headers.get("Content-Length")
+        try:
+            length = int(content_length or "0")
+        except ValueError:
+            error_response(self, HTTPStatus.BAD_REQUEST, "Invalid Content-Length.")
+            return
+
+        if length > MAX_BODY_BYTES:
+            error_response(self, HTTPStatus.REQUEST_ENTITY_TOO_LARGE, "Request body is too large.")
+            return
+
+        try:
+            payload = json.loads(self.rfile.read(length).decode("utf-8") or "{}")
+        except json.JSONDecodeError:
+            error_response(self, HTTPStatus.BAD_REQUEST, "Invalid JSON body.")
+            return
+
+        resolved = resolve_alert_file(payload.get("file") or payload.get("filename") or payload.get("name"))
+        if not resolved:
+            error_response(
+                self,
+                HTTPStatus.BAD_REQUEST,
+                'JSON body must contain "file", "filename", or "name" with a local .webm file name.',
+            )
+            return
+
+        name, file_path = resolved
+        if not file_path.exists() or not file_path.is_file():
+            error_response(self, HTTPStatus.NOT_FOUND, f'Alert file "{name}" does not exist in {ALERTS_DIR}.')
+            return
+
+        alert = {
+            "id": str(uuid.uuid4()),
+            "file": name,
+            "url": f"{MEDIA_PATH}/{quote(name)}",
+            "receivedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        }
+
+        broadcast("alert", alert)
+        with clients_lock:
+            listener_count = len(clients)
+        json_response(self, HTTPStatus.ACCEPTED, {"ok": True, "alert": alert, "listeners": listener_count})
+
+    def serve_asset(self, request_path):
+        relative = request_path.removeprefix(f"{ASSET_PATH}/")
+        file_path = (PUBLIC_DIR / unquote(relative)).resolve()
+        self.serve_file_from_base(file_path, PUBLIC_DIR)
+
+    def serve_public_file(self, file_path):
+        self.serve_file_from_base(file_path.resolve(), PUBLIC_DIR)
+
+    def serve_alert(self, request_path):
+        encoded_name = request_path.removeprefix(f"{MEDIA_PATH}/")
+        name = unquote(encoded_name)
+        resolved = resolve_alert_file(name)
+
+        if not resolved:
+            error_response(self, HTTPStatus.BAD_REQUEST, "Only local .webm file names are allowed.")
+            return
+
+        _, file_path = resolved
+        self.serve_file_from_base(file_path, ALERTS_DIR, "video/webm")
+
+    def serve_file_from_base(self, file_path, base_dir, content_type=None):
+        try:
+            file_path.relative_to(base_dir)
+        except ValueError:
+            error_response(self, HTTPStatus.FORBIDDEN, "Forbidden.")
+            return
+
+        if not file_path.exists() or not file_path.is_file():
+            error_response(self, HTTPStatus.NOT_FOUND, "File not found.")
+            return
+
+        file_size = file_path.stat().st_size
+        content_type = content_type or mimetypes.guess_type(file_path.name)[0] or "application/octet-stream"
+        range_header = self.headers.get("Range")
+
+        if range_header:
+            parsed_range = self.parse_range(range_header, file_size)
+            if not parsed_range:
+                self.send_response(HTTPStatus.REQUESTED_RANGE_NOT_SATISFIABLE)
+                self.send_header("Content-Range", f"bytes */{file_size}")
+                self.end_headers()
+                return
+
+            start, end = parsed_range
+            self.send_response(HTTPStatus.PARTIAL_CONTENT)
+            self.send_header("Accept-Ranges", "bytes")
+            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Range", f"bytes {start}-{end}/{file_size}")
+            self.send_header("Content-Length", str(end - start + 1))
+            self.end_headers()
+            with file_path.open("rb") as file:
+                file.seek(start)
+                self.wfile.write(file.read(end - start + 1))
+            return
+
+        self.send_response(HTTPStatus.OK)
+        self.send_header("Accept-Ranges", "bytes")
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(file_size))
+        self.end_headers()
+        with file_path.open("rb") as file:
+            self.wfile.write(file.read())
+
+    def parse_range(self, range_header, file_size):
+        if not range_header.startswith("bytes=") or "-" not in range_header:
+            return None
+
+        start_value, end_value = range_header.removeprefix("bytes=").split("-", 1)
+        try:
+            start = int(start_value) if start_value else 0
+            end = int(end_value) if end_value else file_size - 1
+        except ValueError:
+            return None
+
+        if start < 0 or end >= file_size or start > end:
+            return None
+
+        return start, end
+
+
+def main():
+    ALERTS_DIR.mkdir(parents=True, exist_ok=True)
+    threading.Thread(target=heartbeat, daemon=True).start()
+
+    server = ThreadingHTTPServer((HOST, PORT), OverlayHandler)
+    print(f"OBS overlay: http://localhost:{PORT}{OVERLAY_PATH}")
+    print(f"Webhook:     http://localhost:{PORT}{WEBHOOK_PATH}")
+    print(f"Webhook alt: http://localhost:{PORT}/webhook")
+    print(f"Alert files: {ALERTS_DIR}")
+    server.serve_forever()
+
+
+if __name__ == "__main__":
+    main()
