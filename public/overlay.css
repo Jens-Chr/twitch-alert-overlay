@@ -75,9 +75,9 @@ body {
   overflow-wrap: anywhere;
   color: transparent;
   font-family: "Avenir Next", Avenir, sans-serif;
-  font-size: clamp(36px, 5.8vh, 86px);
+  font-size: clamp(18px, 4.4vh, 48px);
   font-weight: 800;
-  line-height: 1.08;
+  line-height: 1.05;
   background-image: linear-gradient(180deg, #F59E0B 0%, #E5E7EB 100%);
   background-clip: text;
   filter: drop-shadow(0 4px 12px rgb(0 0 0 / 0.6));
