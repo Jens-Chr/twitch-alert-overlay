@@ -1,6 +1,7 @@
 const video = document.querySelector("#alert-video");
 const stage = document.querySelector(".stage");
 const message = document.querySelector("#alert-message");
+const messageText = document.querySelector("#alert-message-text");
 const params = new URLSearchParams(window.location.search);
 
 const queue = [];
@@ -41,7 +42,7 @@ function setAlertMessage(value) {
   const text = typeof value === "string" ? value.trim() : "";
   const hasMessage = text.length > 0;
 
-  message.textContent = text;
+  messageText.textContent = text;
   message.setAttribute("aria-hidden", hasMessage ? "false" : "true");
   stage.classList.toggle("has-message", hasMessage);
 }
