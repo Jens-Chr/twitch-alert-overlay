@@ -110,12 +110,15 @@ Alert-Ordner verwenden moechtest.
 ## Webhook ausloesen
 
 Der Webhook akzeptiert `file`, `filename` oder `name`. Der Wert muss ein lokaler
-Dateiname mit `.webm` sein, keine Pfade.
+Dateiname mit `.webm` sein, keine Pfade. Optional kannst du `message`, `text`
+oder `caption` mitsenden. Wenn Text vorhanden ist, nutzt die WebM die oberen
+zwei Drittel und die Message erscheint im unteren Drittel. Ohne Text bleibt die
+bisherige Vollbild-Darstellung aktiv.
 
 ```bash
 curl -X POST https://alerts.example.com/overlay/alerts/webhook \
   -H "Content-Type: application/json" \
-  -d '{"file":"follow.webm"}'
+  -d '{"file":"follow.webm","message":"Danke fuer deinen Follow!"}'
 ```
 
 Lokal geht derselbe Request mit `http://localhost:3000`.
@@ -129,7 +132,8 @@ Antwort:
     "id": "b0d9f2f5-6b06-4a3b-a835-feb5dd0c2a9d",
     "file": "follow.webm",
     "url": "/overlay/alerts/media/follow.webm",
-    "receivedAt": "2026-05-22T12:00:00Z"
+    "receivedAt": "2026-05-22T12:00:00Z",
+    "message": "Danke fuer deinen Follow!"
   },
   "listeners": 1
 }

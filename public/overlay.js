@@ -1,4 +1,6 @@
 const video = document.querySelector("#alert-video");
+const stage = document.querySelector(".stage");
+const message = document.querySelector("#alert-message");
 const params = new URLSearchParams(window.location.search);
 
 const queue = [];
@@ -35,6 +37,15 @@ function debugLog(message, data) {
   }
 }
 
+function setAlertMessage(value) {
+  const text = typeof value === "string" ? value.trim() : "";
+  const hasMessage = text.length > 0;
+
+  message.textContent = text;
+  message.setAttribute("aria-hidden", hasMessage ? "false" : "true");
+  stage.classList.toggle("has-message", hasMessage);
+}
+
 function enqueueAlert(alert) {
   queue.push(alert);
   debugLog("Alert empfangen", alert);
@@ -54,6 +65,7 @@ async function playNext() {
     video.pause();
     video.removeAttribute("src");
     video.load();
+    setAlertMessage(alert.message);
 
     await new Promise((resolve) => window.setTimeout(resolve, 80));
 
@@ -73,6 +85,7 @@ function finishCurrent() {
   video.pause();
   video.removeAttribute("src");
   video.load();
+  setAlertMessage("");
   isPlaying = false;
   playNext();
 }

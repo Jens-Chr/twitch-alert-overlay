@@ -18,6 +18,7 @@ ALERTS_DIR = Path(os.environ.get("ALERTS_DIR", ROOT_DIR / "alerts")).resolve()
 HOST = os.environ.get("HOST", "0.0.0.0")
 PORT = int(os.environ.get("PORT", os.environ.get("OBS_OVERLAY_PORT", "3000")))
 MAX_BODY_BYTES = 1024 * 1024
+MAX_MESSAGE_CHARS = 240
 OVERLAY_PATH = "/overlay/alerts"
 ASSET_PATH = f"{OVERLAY_PATH}/assets"
 EVENTS_PATH = f"{OVERLAY_PATH}/events"
@@ -86,6 +87,14 @@ def list_alert_files():
         for entry in ALERTS_DIR.iterdir()
         if entry.is_file() and entry.suffix.lower() == ".webm"
     )
+
+
+def normalize_alert_message(value):
+    if not isinstance(value, str):
+        return ""
+
+    message = " ".join(value.split())
+    return message[:MAX_MESSAGE_CHARS]
 
 
 def broadcast(event_type, payload):
@@ -213,6 +222,7 @@ class OverlayHandler(BaseHTTPRequestHandler):
         if not file_path.exists() or not file_path.is_file():
             error_response(self, HTTPStatus.NOT_FOUND, f'Alert file "{name}" does not exist in {ALERTS_DIR}.')
             return
+        message = normalize_alert_message(payload.get("message") or payload.get("text") or payload.get("caption"))
 
         alert = {
             "id": str(uuid.uuid4()),
@@ -220,6 +230,8 @@ class OverlayHandler(BaseHTTPRequestHandler):
             "url": f"{MEDIA_PATH}/{quote(name)}",
             "receivedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         }
+        if message:
+            alert["message"] = message
 
         broadcast("alert", alert)
         with clients_lock:

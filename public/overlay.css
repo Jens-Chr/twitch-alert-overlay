@@ -41,3 +41,33 @@ body {
 .alert-video.is-playing {
   opacity: 1;
 }
+
+.stage.has-message .alert-video {
+  inset: 0 0 auto;
+  height: 66.666%;
+}
+
+.alert-message {
+  position: absolute;
+  inset: auto 4% 0;
+  height: 33.333%;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 0 3%;
+  overflow-wrap: anywhere;
+  text-align: center;
+  font-family: "Avenir Next", Avenir, sans-serif;
+  font-size: clamp(36px, 5.8vh, 86px);
+  font-weight: 800;
+  line-height: 1.08;
+  background: linear-gradient(180deg, #F59E0B 0%, #E5E7EB 100%);
+  background-clip: text;
+  filter: drop-shadow(0 4px 12px rgb(0 0 0 / 0.6));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.stage.has-message .alert-message {
+  display: flex;
+}
