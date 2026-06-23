@@ -19,6 +19,7 @@ python3 server.py
 Danach sind lokal diese URLs verfuegbar:
 
 - Overlay fuer OBS: `http://localhost:3000/overlay/alerts`
+- Admin-Oberflaeche: `http://localhost:3000/admin/alerts`
 - Webhook: `http://localhost:3000/overlay/alerts/webhook`
 - Webhook, kompatibel: `http://localhost:3000/webhook`
 - Healthcheck: `http://localhost:3000/overlay/alerts/health`
@@ -45,6 +46,8 @@ Wichtige Variablen:
 
 ```dotenv
 ALERT_OVERLAY_HOST=alerts.example.com
+ADMIN_PASSWORD=admin-geheim
+MAX_UPLOAD_BYTES=209715200
 TRAEFIK_ENTRYPOINT=websecure
 TRAEFIK_CERT_RESOLVER=letsencrypt
 N8N_NETWORK=n8n-network
@@ -64,6 +67,8 @@ Extern routet Traefik nur diese Pfade:
 /overlay/alerts/events
 /overlay/alerts/media/*
 /overlay/alerts/webhook
+/admin/alerts
+/admin/alerts/*
 ```
 
 Nicht ueber Traefik geroutet werden zum Beispiel:
@@ -77,9 +82,18 @@ Nicht ueber Traefik geroutet werden zum Beispiel:
 /overlay/chat
 ```
 
-## WebM-Dateien hinzufuegen
+## WebM-Dateien verwalten
 
-Lege deine Alert-Dateien einfach in den Ordner `alerts/`.
+Die Admin-Oberflaeche unter `/admin/alerts` zeigt alle `.webm`-Dateien im
+Alert-Ordner. Dort kannst du Dateien per Drag and Drop oder Dateiauswahl
+hochladen, einzeln auswaehlen, im Browser anschauen, oeffnen und loeschen.
+
+Wenn `ADMIN_PASSWORD` gesetzt ist, erscheint zuerst die Login-Seite. Nach dem
+Login wird wie beim Markdown-Overlay ein HttpOnly-Session-Cookie fuer
+`/admin/alerts` gesetzt. Bleibt `ADMIN_PASSWORD` leer, ist die Admin-UI
+ungeschuetzt.
+
+Du kannst Alert-Dateien weiterhin direkt in den Ordner `alerts/` legen.
 
 Beispiel:
 
@@ -103,9 +117,13 @@ Wenn du lokal einen anderen Ordner verwenden willst:
 ALERTS_DIR=/pfad/zu/deinen/alerts python3 server.py
 ```
 
-Bei Docker Compose ist standardmaessig `./alerts:/app/alerts:ro` eingebunden.
+Bei Docker Compose ist standardmaessig `./alerts:/app/alerts` beschreibbar
+eingebunden, damit Uploads und Loeschungen aus der Admin-UI funktionieren.
 Passe den Volume-Pfad in `docker-compose.yml` an, wenn du einen anderen lokalen
 Alert-Ordner verwenden moechtest.
+
+Das Upload-Limit ist standardmaessig 200 MiB und kann mit `MAX_UPLOAD_BYTES`
+geaendert werden.
 
 ## Webhook ausloesen
 

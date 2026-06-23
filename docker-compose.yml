@@ -11,13 +11,15 @@ services:
       HOST: 0.0.0.0
       PORT: 3000
       ALERTS_DIR: /app/alerts
+      ADMIN_PASSWORD: "${ADMIN_PASSWORD:-}"
+      MAX_UPLOAD_BYTES: "${MAX_UPLOAD_BYTES:-209715200}"
     volumes:
-      - ./alerts:/app/alerts:ro
+      - ./alerts:/app/alerts
     labels:
       traefik.enable: "true"
       traefik.docker.network: "${N8N_NETWORK:-n8n-network}"
       traefik.http.routers.twitch-alert-overlay.entrypoints: "${TRAEFIK_ENTRYPOINT:-websecure}"
-      traefik.http.routers.twitch-alert-overlay.rule: "Host(`${ALERT_OVERLAY_HOST:-alerts.example.com}`) && (Path(`/overlay/alerts`) || Path(`/overlay/alerts/`) || Path(`/overlay/alerts/events`) || Path(`/overlay/alerts/events/`) || Path(`/overlay/alerts/webhook`) || Path(`/overlay/alerts/webhook/`) || PathPrefix(`/overlay/alerts/assets/`) || PathPrefix(`/overlay/alerts/media/`))"
+      traefik.http.routers.twitch-alert-overlay.rule: "Host(`${ALERT_OVERLAY_HOST:-alerts.example.com}`) && (Path(`/overlay/alerts`) || Path(`/overlay/alerts/`) || Path(`/overlay/alerts/events`) || Path(`/overlay/alerts/events/`) || Path(`/overlay/alerts/webhook`) || Path(`/overlay/alerts/webhook/`) || Path(`/admin/alerts`) || PathPrefix(`/admin/alerts/`) || PathPrefix(`/overlay/alerts/assets/`) || PathPrefix(`/overlay/alerts/media/`))"
       traefik.http.routers.twitch-alert-overlay.priority: "100"
       traefik.http.routers.twitch-alert-overlay.tls: "true"
       traefik.http.routers.twitch-alert-overlay.tls.certresolver: "${TRAEFIK_CERT_RESOLVER:-letsencrypt}"
