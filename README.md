@@ -46,7 +46,10 @@ Wichtige Variablen:
 
 ```dotenv
 ALERT_OVERLAY_HOST=alerts.example.com
-ADMIN_PASSWORD=admin-geheim
+ADMIN_PASSWORD=
+TRUST_AUTHENTIK_HEADERS=true
+AUTHENTIK_REQUIRED_GROUP=stream-admins
+AUTHENTIK_FORWARD_AUTH_URL=http://authentik-server:9000/outpost.goauthentik.io/auth/traefik
 MAX_UPLOAD_BYTES=209715200
 TRAEFIK_ENTRYPOINT=websecure
 TRAEFIK_CERT_RESOLVER=letsencrypt
@@ -59,28 +62,74 @@ Start:
 docker compose up --build -d
 ```
 
-Extern routet Traefik nur diese Pfade:
+Traefik-Konfiguration pruefen:
+
+```bash
+ALERT_OVERLAY_HOST=alerts.example.com docker compose config
+docker network inspect n8n-network
+```
+
+Traefik routet die Pfade getrennt, damit OBS und Webhooks ohne Login funktionieren und nur die Admin-Flaeche Authentik nutzt:
 
 ```text
+# oeffentlich, ohne ForwardAuth
 /overlay/alerts
 /overlay/alerts/assets/*
 /overlay/alerts/events
 /overlay/alerts/media/*
 /overlay/alerts/webhook
+/health
+/overlay/alerts/health
+
+# geschuetzt per Authentik ForwardAuth
 /admin/alerts
 /admin/alerts/*
+/admin/alerts/api/auth/debug
+
+# Authentik-Outpost fuer Login/Ruecksprung auf demselben Host
+/outpost.goauthentik.io/...
 ```
 
 Nicht ueber Traefik geroutet werden zum Beispiel:
 
 ```text
 /webhook
-/health
 /api/files
-/overlay/alerts/health
 /overlay/alerts/api/files
 /overlay/chat
 ```
+
+## Authentik Forward Auth
+
+Der Reverse Proxy ist Traefik v3 aus dem n8n-Stack. Dieses Compose-Setup trennt drei Router auf dem Alert-Host: `twitch-alert-overlay-public` fuer OBS, Assets, Media, Events, Webhook und Health ohne Auth, `twitch-alert-overlay-admin` fuer `/admin/alerts...` mit ForwardAuth und `twitch-alert-overlay-authentik-outpost` fuer `/outpost.goauthentik.io/...` zum Authentik-Service `authentik@docker`. Der Container haengt am externen Docker-Netzwerk `${N8N_NETWORK:-n8n-network}`; Authentik und Traefik muessen dort ebenfalls erreichbar sein.
+
+Traefik reicht nach erfolgreicher ForwardAuth diese Header an die App weiter, sofern Authentik sie liefert:
+
+```text
+X-authentik-username
+X-authentik-name
+X-authentik-email
+X-authentik-groups
+```
+
+Manuelle Schritte in Authentik:
+
+1. Gruppe `stream-admins` anlegen und nur berechtigte Stream-Admin-Benutzer aufnehmen.
+2. Proxy Provider `Alert Overlay Admin` anlegen, Forward-Auth/Single-Application-Modus verwenden und als externe URL `https://<ALERT_OVERLAY_HOST>` setzen.
+3. Zugriff auf die Gruppe `stream-admins` beschraenken, z. B. ueber Policy/Binding am Provider oder an der Application. Die App prueft zusaetzlich `AUTHENTIK_REQUIRED_GROUP=stream-admins` gegen `X-authentik-groups`.
+4. Application `Alert Overlay Admin` mit diesem Provider anlegen.
+5. Den Provider dem Embedded Outpost oder deinem verwendeten Proxy Outpost zuweisen.
+6. Wenn dein Authentik-Service im Docker-Netz anders heisst, `AUTHENTIK_FORWARD_AUTH_URL` in `.env` auf die interne Outpost-URL setzen.
+
+Der Debug-Endpunkt ist nur im geschuetzten Admin-Bereich verfuegbar:
+
+```bash
+curl -i https://<ALERT_OVERLAY_HOST>/admin/alerts/api/auth/debug
+```
+
+Ohne Authentik-Session sollte Traefik zu Authentik weiterleiten. Nach erfolgreichem Login zeigt die JSON-Antwort den erkannten Benutzer, die Gruppen und die benoetigte Gruppe. Benutzer ohne `stream-admins` duerfen in Authentik keinen Zugriff erhalten und erreichen die App nicht.
+
+Wenn `ADMIN_PASSWORD` gesetzt bleibt, funktioniert es als lokale Fallback-Absicherung fuer direkte interne Zugriffe. Fuer reinen Authentik-Betrieb ist `ADMIN_PASSWORD=` uebersichtlicher, weil dann keine zweite Login-Variante angezeigt wird. Setze keinen Host-Port auf den Container, solange `TRUST_AUTHENTIK_HEADERS=true` ist; diese Header duerfen nur vom Reverse Proxy kommen.
 
 ## WebM-Dateien verwalten
 
@@ -192,3 +241,22 @@ Twitch selbst kann deinen lokalen Rechner nicht direkt erreichen. In der Praxis
 wird der POST auf `/overlay/alerts/webhook` meist von einem Bot, Streamer.bot,
 Mix It Up, n8n, einem eigenen Backend oder einem Tunnel wie Cloudflare
 Tunnel/ngrok ausgeloest.
+
+## Tests
+
+Lokale Syntaxpruefung:
+
+```bash
+python3 -m py_compile server.py
+```
+
+Nach dem Deployment sollten diese Checks gelten:
+
+```bash
+curl -I https://<ALERT_OVERLAY_HOST>/overlay/alerts
+curl -I https://<ALERT_OVERLAY_HOST>/overlay/alerts/events
+curl -I https://<ALERT_OVERLAY_HOST>/admin/alerts
+curl -I https://<ALERT_OVERLAY_HOST>/admin/alerts/api/auth/debug
+```
+
+Die Overlay-/Event-Checks duerfen keinen Login brauchen. Die Admin-Checks sollen ohne Session zu Authentik weiterleiten und nach Login zur angefragten URL zurueckkehren.

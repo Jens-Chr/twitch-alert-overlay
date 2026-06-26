@@ -12,17 +12,40 @@ services:
       PORT: 3000
       ALERTS_DIR: /app/alerts
       ADMIN_PASSWORD: "${ADMIN_PASSWORD:-}"
+      TRUST_AUTHENTIK_HEADERS: "${TRUST_AUTHENTIK_HEADERS:-true}"
+      AUTHENTIK_REQUIRED_GROUP: "${AUTHENTIK_REQUIRED_GROUP:-stream-admins}"
       MAX_UPLOAD_BYTES: "${MAX_UPLOAD_BYTES:-209715200}"
     volumes:
       - ./alerts:/app/alerts
     labels:
       traefik.enable: "true"
       traefik.docker.network: "${N8N_NETWORK:-n8n-network}"
-      traefik.http.routers.twitch-alert-overlay.entrypoints: "${TRAEFIK_ENTRYPOINT:-websecure}"
-      traefik.http.routers.twitch-alert-overlay.rule: "Host(`${ALERT_OVERLAY_HOST:-alerts.example.com}`) && (Path(`/overlay/alerts`) || Path(`/overlay/alerts/`) || Path(`/overlay/alerts/events`) || Path(`/overlay/alerts/events/`) || Path(`/overlay/alerts/webhook`) || Path(`/overlay/alerts/webhook/`) || Path(`/admin/alerts`) || PathPrefix(`/admin/alerts/`) || PathPrefix(`/overlay/alerts/assets/`) || PathPrefix(`/overlay/alerts/media/`))"
-      traefik.http.routers.twitch-alert-overlay.priority: "100"
-      traefik.http.routers.twitch-alert-overlay.tls: "true"
-      traefik.http.routers.twitch-alert-overlay.tls.certresolver: "${TRAEFIK_CERT_RESOLVER:-letsencrypt}"
+      traefik.http.middlewares.twitch-alert-overlay-authentik.forwardauth.address: "${AUTHENTIK_FORWARD_AUTH_URL:-http://authentik-server:9000/outpost.goauthentik.io/auth/traefik}"
+      traefik.http.middlewares.twitch-alert-overlay-authentik.forwardauth.trustForwardHeader: "true"
+      traefik.http.middlewares.twitch-alert-overlay-authentik.forwardauth.authResponseHeaders: "X-authentik-username,X-authentik-name,X-authentik-email,X-authentik-groups"
+
+      traefik.http.routers.twitch-alert-overlay-public.entrypoints: "${TRAEFIK_ENTRYPOINT:-websecure}"
+      traefik.http.routers.twitch-alert-overlay-public.rule: "Host(`${ALERT_OVERLAY_HOST:-alerts.example.com}`) && (Path(`/overlay/alerts`) || Path(`/overlay/alerts/`) || Path(`/overlay/alerts/events`) || Path(`/overlay/alerts/events/`) || Path(`/overlay/alerts/webhook`) || Path(`/overlay/alerts/webhook/`) || Path(`/health`) || Path(`/overlay/alerts/health`) || PathPrefix(`/overlay/alerts/assets/`) || PathPrefix(`/overlay/alerts/media/`))"
+      traefik.http.routers.twitch-alert-overlay-public.priority: "100"
+      traefik.http.routers.twitch-alert-overlay-public.tls: "true"
+      traefik.http.routers.twitch-alert-overlay-public.tls.certresolver: "${TRAEFIK_CERT_RESOLVER:-letsencrypt}"
+      traefik.http.routers.twitch-alert-overlay-public.service: "twitch-alert-overlay"
+
+      traefik.http.routers.twitch-alert-overlay-admin.entrypoints: "${TRAEFIK_ENTRYPOINT:-websecure}"
+      traefik.http.routers.twitch-alert-overlay-admin.rule: "Host(`${ALERT_OVERLAY_HOST:-alerts.example.com}`) && (Path(`/admin/alerts`) || PathPrefix(`/admin/alerts/`))"
+      traefik.http.routers.twitch-alert-overlay-admin.priority: "150"
+      traefik.http.routers.twitch-alert-overlay-admin.middlewares: "twitch-alert-overlay-authentik"
+      traefik.http.routers.twitch-alert-overlay-admin.tls: "true"
+      traefik.http.routers.twitch-alert-overlay-admin.tls.certresolver: "${TRAEFIK_CERT_RESOLVER:-letsencrypt}"
+      traefik.http.routers.twitch-alert-overlay-admin.service: "twitch-alert-overlay"
+
+      traefik.http.routers.twitch-alert-overlay-authentik-outpost.entrypoints: "${TRAEFIK_ENTRYPOINT:-websecure}"
+      traefik.http.routers.twitch-alert-overlay-authentik-outpost.rule: "Host(`${ALERT_OVERLAY_HOST:-alerts.example.com}`) && PathPrefix(`/outpost.goauthentik.io/`)"
+      traefik.http.routers.twitch-alert-overlay-authentik-outpost.priority: "200"
+      traefik.http.routers.twitch-alert-overlay-authentik-outpost.tls: "true"
+      traefik.http.routers.twitch-alert-overlay-authentik-outpost.tls.certresolver: "${TRAEFIK_CERT_RESOLVER:-letsencrypt}"
+      traefik.http.routers.twitch-alert-overlay-authentik-outpost.service: "authentik@docker"
+
       traefik.http.services.twitch-alert-overlay.loadbalancer.server.port: "3000"
 
 networks:

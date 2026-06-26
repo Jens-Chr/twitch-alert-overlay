@@ -35,9 +35,12 @@ API_FILES_PATH = f"{OVERLAY_PATH}/api/files"
 HEALTH_PATH = f"{OVERLAY_PATH}/health"
 WEBHOOK_PATH = f"{OVERLAY_PATH}/webhook"
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
+TRUST_AUTHENTIK_HEADERS = os.environ.get("TRUST_AUTHENTIK_HEADERS", "").lower() in {"1", "true", "yes", "on"}
+AUTHENTIK_REQUIRED_GROUP = os.environ.get("AUTHENTIK_REQUIRED_GROUP", "").strip()
 ADMIN_BASE_PATH = "/admin/alerts"
 ADMIN_LOGIN_PATH = f"{ADMIN_BASE_PATH}/login"
 ADMIN_LOGOUT_PATH = f"{ADMIN_BASE_PATH}/logout"
+ADMIN_AUTH_DEBUG_PATH = f"{ADMIN_BASE_PATH}/api/auth/debug"
 ADMIN_API_FILES_PATH = f"{ADMIN_BASE_PATH}/api/files"
 ADMIN_LOGIN_BODY_BYTES = 4 * 1024
 ADMIN_SESSION_COOKIE = "twitch_alert_overlay_admin"
@@ -365,6 +368,10 @@ class OverlayHandler(BaseHTTPRequestHandler):
             self.handle_admin_logout()
             return
 
+        if path == ADMIN_AUTH_DEBUG_PATH:
+            self.handle_admin_auth_debug()
+            return
+
         if path == ADMIN_API_FILES_PATH or path.startswith(f"{ADMIN_API_FILES_PATH}/"):
             self.handle_admin_files(path)
             return
@@ -381,7 +388,7 @@ class OverlayHandler(BaseHTTPRequestHandler):
             return
 
         logout_form = ""
-        if ADMIN_PASSWORD:
+        if ADMIN_PASSWORD and not self.authentik_authorized():
             logout_form = (
                 '<form method="post" action="/admin/alerts/logout">'
                 '<button class="secondary" type="submit">Logout</button>'
@@ -437,6 +444,27 @@ class OverlayHandler(BaseHTTPRequestHandler):
         see_other(self, ADMIN_BASE_PATH)
         self.clear_admin_session_cookie()
         self.end_headers()
+
+    def handle_admin_auth_debug(self):
+        if self.command != "GET":
+            method_not_allowed(self, "GET")
+            return
+
+        if not self.admin_authorized():
+            error_response(self, HTTPStatus.UNAUTHORIZED, "Admin login required.")
+            return
+
+        json_response(
+            self,
+            HTTPStatus.OK,
+            {
+                "ok": True,
+                "authenticated": True,
+                "trustedAuthentikHeaders": TRUST_AUTHENTIK_HEADERS,
+                "requiredGroup": AUTHENTIK_REQUIRED_GROUP,
+                "authentik": self.authentik_user(),
+            },
+        )
 
     def handle_admin_files(self, path):
         if not self.admin_authorized():
@@ -553,6 +581,9 @@ class OverlayHandler(BaseHTTPRequestHandler):
         self.wfile.write(encoded)
 
     def admin_authorized(self):
+        if self.authentik_authorized():
+            return True
+
         if not ADMIN_PASSWORD:
             return True
 
@@ -568,6 +599,27 @@ class OverlayHandler(BaseHTTPRequestHandler):
             return False
 
         return hmac.compare_digest(cookie.value, self.admin_session_value())
+
+    def authentik_authorized(self):
+        if not TRUST_AUTHENTIK_HEADERS:
+            return False
+
+        user = self.authentik_user()
+        if not user["username"]:
+            return False
+
+        if not AUTHENTIK_REQUIRED_GROUP:
+            return True
+
+        return authentik_groups_contain(user["groups"], AUTHENTIK_REQUIRED_GROUP)
+
+    def authentik_user(self):
+        return {
+            "username": self.headers.get("X-authentik-username", "").strip(),
+            "name": self.headers.get("X-authentik-name", "").strip(),
+            "email": self.headers.get("X-authentik-email", "").strip(),
+            "groups": self.headers.get("X-authentik-groups", "").strip(),
+        }
 
     def admin_session_value(self):
         digest = hmac.new(
@@ -744,6 +796,13 @@ class OverlayHandler(BaseHTTPRequestHandler):
             return None
 
         return start, end
+
+
+def authentik_groups_contain(groups, required):
+    return any(
+        group.strip() == required
+        for group in groups.replace(";", "|").replace(",", "|").split("|")
+    )
 
 
 def main():
