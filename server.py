@@ -56,6 +56,21 @@ ADMIN_PAGE = """<!doctype html>
     <link rel="stylesheet" href="/overlay/alerts/assets/admin.css">
   </head>
   <body>
+    <div class="stream-admin-layout">
+      <aside class="stream-admin-nav-panel" aria-label="Stream Admin Navigation">
+        <div class="stream-admin-nav-brand">
+          <strong>Stream Admin</strong>
+          <span>Sali-H&uuml;pft</span>
+        </div>
+        <nav class="stream-admin-nav" aria-label="Admin-Anwendungen">
+          <a class="stream-admin-nav-link" href="/admin/console/">Admin Console</a>
+          <a class="stream-admin-nav-link" href="/admin/markdown">Markdown Overlay</a>
+          <a class="stream-admin-nav-link" href="/admin/alerts" aria-current="page">Alert Overlay</a>
+          <a class="stream-admin-nav-link" href="/grafana" target="_blank" rel="noopener noreferrer">Monitoring</a>
+        </nav>
+      </aside>
+
+      <div class="stream-admin-main">
     <header class="topbar">
       <div class="brand">
         <strong>Sali-H&uuml;pft Admin</strong>
@@ -131,6 +146,8 @@ ADMIN_PAGE = """<!doctype html>
 
     <div id="toast" class="toast" hidden></div>
     <script src="/overlay/alerts/assets/admin.js"></script>
+      </div>
+    </div>
   </body>
 </html>
 """
