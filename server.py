@@ -42,6 +42,7 @@ ADMIN_LOGIN_PATH = f"{ADMIN_BASE_PATH}/login"
 ADMIN_LOGOUT_PATH = f"{ADMIN_BASE_PATH}/logout"
 ADMIN_AUTH_DEBUG_PATH = f"{ADMIN_BASE_PATH}/api/auth/debug"
 ADMIN_API_FILES_PATH = f"{ADMIN_BASE_PATH}/api/files"
+ADMIN_API_TRIGGER_PATH = f"{ADMIN_BASE_PATH}/api/trigger"
 ADMIN_LOGIN_BODY_BYTES = 4 * 1024
 ADMIN_SESSION_COOKIE = "twitch_alert_overlay_admin"
 ADMIN_SESSION_COOKIE_KEY = "twitch-alert-overlay-admin-v1"
@@ -102,8 +103,13 @@ ADMIN_PAGE = """<!doctype html>
             <input id="urlInput" type="text" readonly>
           </label>
           <div id="selectedInfo" class="last-modified" hidden></div>
+          <label for="messageInput">Message im Overlay
+            <textarea id="messageInput" maxlength="240" rows="4" spellcheck="true"></textarea>
+          </label>
+          <div id="messageCount" class="char-count">0 / 240</div>
           <div class="actions">
             <div class="action-group">
+              <button id="triggerButton" type="button" disabled>Im Overlay abspielen</button>
               <button id="refreshButton" class="secondary" type="button">Neu laden</button>
               <button id="deleteButton" class="danger" type="button" disabled>Loeschen</button>
             </div>
@@ -372,6 +378,10 @@ class OverlayHandler(BaseHTTPRequestHandler):
             self.handle_admin_auth_debug()
             return
 
+        if path == ADMIN_API_TRIGGER_PATH:
+            self.handle_admin_trigger()
+            return
+
         if path == ADMIN_API_FILES_PATH or path.startswith(f"{ADMIN_API_FILES_PATH}/"):
             self.handle_admin_files(path)
             return
@@ -502,6 +512,21 @@ class OverlayHandler(BaseHTTPRequestHandler):
             return
 
         method_not_allowed(self, "GET", "POST", "DELETE")
+
+    def handle_admin_trigger(self):
+        if not self.admin_authorized():
+            error_response(self, HTTPStatus.UNAUTHORIZED, "Admin login required.")
+            return
+
+        if self.command != "POST":
+            method_not_allowed(self, "POST")
+            return
+
+        payload = self.read_json_body()
+        if payload is None:
+            return
+
+        self.send_alert(payload)
 
     def handle_admin_upload(self, name, file_path):
         content_length = self.headers.get("Content-Length")
@@ -671,24 +696,38 @@ class OverlayHandler(BaseHTTPRequestHandler):
             with clients_lock:
                 clients.discard(client)
 
-    def handle_webhook(self):
+    def read_json_body(self):
         content_length = self.headers.get("Content-Length")
         try:
             length = int(content_length or "0")
         except ValueError:
             error_response(self, HTTPStatus.BAD_REQUEST, "Invalid Content-Length.")
-            return
+            return None
 
         if length > MAX_BODY_BYTES:
             error_response(self, HTTPStatus.REQUEST_ENTITY_TOO_LARGE, "Request body is too large.")
-            return
+            return None
 
         try:
             payload = json.loads(self.rfile.read(length).decode("utf-8") or "{}")
         except json.JSONDecodeError:
             error_response(self, HTTPStatus.BAD_REQUEST, "Invalid JSON body.")
+            return None
+
+        if not isinstance(payload, dict):
+            error_response(self, HTTPStatus.BAD_REQUEST, "JSON body must be an object.")
+            return None
+
+        return payload
+
+    def handle_webhook(self):
+        payload = self.read_json_body()
+        if payload is None:
             return
 
+        self.send_alert(payload)
+
+    def send_alert(self, payload):
         resolved = resolve_alert_file(payload.get("file") or payload.get("filename") or payload.get("name"))
         if not resolved:
             error_response(

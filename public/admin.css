@@ -35,7 +35,8 @@ body {
 }
 
 button,
-input {
+input,
+textarea {
   font: inherit;
 }
 
@@ -233,11 +234,10 @@ label {
 }
 
 input[type="text"],
-input[type="password"] {
+input[type="password"],
+textarea {
   width: 100%;
   min-width: 0;
-  height: 42px;
-  padding: 0 12px;
   border: 1px solid rgba(148, 163, 184, 0.24);
   border-radius: 8px;
   background: var(--field);
@@ -245,7 +245,21 @@ input[type="password"] {
   outline: none;
 }
 
-input:focus {
+input[type="text"],
+input[type="password"] {
+  height: 42px;
+  padding: 0 12px;
+}
+
+textarea {
+  min-height: 96px;
+  padding: 10px 12px;
+  line-height: 1.4;
+  resize: vertical;
+}
+
+input:focus,
+textarea:focus {
   border-color: var(--line);
   box-shadow: 0 0 0 3px rgba(136, 92, 246, 0.18);
 }
@@ -359,6 +373,14 @@ input:read-only {
   color: var(--muted);
   font-size: 13px;
   font-weight: 750;
+}
+
+.char-count {
+  margin-top: -8px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 750;
+  text-align: right;
 }
 
 .actions {

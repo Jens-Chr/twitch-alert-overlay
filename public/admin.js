@@ -1,5 +1,6 @@
 (() => {
   const apiBase = "/admin/alerts/api/files";
+  const triggerApi = "/admin/alerts/api/trigger";
 
   const state = {
     files: [],
@@ -20,6 +21,9 @@
     modified: document.getElementById("modifiedInput"),
     url: document.getElementById("urlInput"),
     selectedInfo: document.getElementById("selectedInfo"),
+    message: document.getElementById("messageInput"),
+    messageCount: document.getElementById("messageCount"),
+    trigger: document.getElementById("triggerButton"),
     refresh: document.getElementById("refreshButton"),
     delete: document.getElementById("deleteButton"),
     openLink: document.getElementById("openLink"),
@@ -93,6 +97,12 @@
     }, isError ? 5200 : 2600);
   }
 
+  function updateMessageCount() {
+    const max = Number(el.message.getAttribute("maxlength")) || 0;
+    const count = el.message.value.length;
+    el.messageCount.textContent = max > 0 ? count + " / " + max : String(count);
+  }
+
   function selectedFile() {
     return state.files.find((file) => file.name === state.selectedName) || null;
   }
@@ -163,6 +173,7 @@
     el.modified.value = "";
     el.url.value = "";
     el.selectedInfo.hidden = true;
+    el.trigger.disabled = true;
     el.delete.disabled = true;
     el.openLink.href = "#";
     el.openLink.classList.add("is-disabled");
@@ -187,6 +198,7 @@
     el.url.value = file.url;
     el.selectedInfo.textContent = "Webhook-Wert: " + file.name;
     el.selectedInfo.hidden = false;
+    el.trigger.disabled = false;
     el.delete.disabled = false;
     el.openLink.href = file.url;
     el.openLink.classList.remove("is-disabled");
@@ -267,6 +279,35 @@
     }
   }
 
+  async function triggerSelected() {
+    const file = selectedFile();
+    if (!file) {
+      return;
+    }
+
+    const payload = { file: file.name };
+    const message = el.message.value.trim();
+    if (message) {
+      payload.message = message;
+    }
+
+    el.trigger.disabled = true;
+    try {
+      const result = await api(triggerApi, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const listeners = Number(result.listeners) || 0;
+      const listenerText = listeners === 1 ? "1 Overlay verbunden" : listeners + " Overlays verbunden";
+      showToast("Alert gesendet (" + listenerText + ")");
+    } catch (error) {
+      showToast(error.message, true);
+    } finally {
+      el.trigger.disabled = !selectedFile();
+    }
+  }
+
   function wireDropZone() {
     el.uploadButton.addEventListener("click", () => el.fileInput.click());
     el.dropZone.addEventListener("click", () => el.fileInput.click());
@@ -303,8 +344,11 @@
   el.refresh.addEventListener("click", () => {
     loadFiles({ keepSelection: true }).then(() => showToast("Liste aktualisiert")).catch((error) => showToast(error.message, true));
   });
+  el.message.addEventListener("input", updateMessageCount);
+  el.trigger.addEventListener("click", triggerSelected);
   el.delete.addEventListener("click", deleteSelected);
 
+  updateMessageCount();
   wireDropZone();
   loadFiles().catch((error) => showToast(error.message, true));
 })();

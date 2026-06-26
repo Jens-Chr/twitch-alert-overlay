@@ -135,7 +135,9 @@ Wenn `ADMIN_PASSWORD` gesetzt bleibt, funktioniert es als lokale Fallback-Absich
 
 Die Admin-Oberflaeche unter `/admin/alerts` zeigt alle `.webm`-Dateien im
 Alert-Ordner. Dort kannst du Dateien per Drag and Drop oder Dateiauswahl
-hochladen, einzeln auswaehlen, im Browser anschauen, oeffnen und loeschen.
+hochladen, einzeln auswaehlen, im Browser anschauen, oeffnen, loeschen und
+direkt im verbundenen Overlay abspielen. In der Detailansicht kannst du eine
+optionale Message eintragen, die beim Abspielen im Overlay angezeigt wird.
 
 Wenn `ADMIN_PASSWORD` gesetzt ist, erscheint zuerst die Login-Seite. Nach dem
 Login wird wie beim Markdown-Overlay ein HttpOnly-Session-Cookie fuer
