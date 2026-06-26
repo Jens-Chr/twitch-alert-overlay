@@ -57,18 +57,19 @@ ADMIN_PAGE = """<!doctype html>
   </head>
   <body>
     <div class="stream-admin-layout">
-      <aside class="stream-admin-nav-panel" aria-label="Stream Admin Navigation">
-        <div class="stream-admin-nav-brand">
-          <strong>Stream Admin</strong>
-          <span>Sali-H&uuml;pft</span>
-        </div>
-        <nav class="stream-admin-nav" aria-label="Admin-Anwendungen">
-          <a class="stream-admin-nav-link" href="/admin/console/">Admin Console</a>
-          <a class="stream-admin-nav-link" href="/admin/markdown">Markdown Overlay</a>
-          <a class="stream-admin-nav-link" href="/admin/alerts" aria-current="page">Alert Overlay</a>
-          <a class="stream-admin-nav-link" href="/grafana" target="_blank" rel="noopener noreferrer">Monitoring</a>
-        </nav>
-      </aside>
+    <aside class="admin-shell__sidebar">
+          <div class="admin-shell__brand-row">
+            <h1 class="admin-shell__title">Stream Admin</h1>
+          </div>
+          <nav class="admin-shell__nav" aria-label="Admin-Anwendungen" data-open="true">
+            <ul class="admin-shell__nav-list">
+              <li class="admin-shell__nav-item"><a class="admin-shell__nav-link" href="/admin/console/" data-active="false"><span class="admin-shell__item-label">Admin Console</span></a></li>
+              <li class="admin-shell__nav-item"><a class="admin-shell__nav-link" href="/admin/markdown" data-active="false"><span class="admin-shell__item-label">Markdown Overlay</span></a></li>
+              <li class="admin-shell__nav-item"><a class="admin-shell__nav-link" href="/admin/alerts" aria-current="page" data-active="true"><span class="admin-shell__item-label">Alert Overlay</span></a></li>
+              <li class="admin-shell__nav-item"><a class="admin-shell__nav-link" href="/grafana" data-active="false" target="_blank" rel="noopener noreferrer"><span class="admin-shell__item-label">Monitoring</span></a></li>
+            </ul>
+          </nav>
+        </aside>
 
       <div class="stream-admin-main">
     <header class="topbar">
@@ -161,6 +162,21 @@ ADMIN_LOGIN_PAGE = """<!doctype html>
     <link rel="stylesheet" href="/overlay/alerts/assets/admin.css">
   </head>
   <body class="login-body">
+    <div class="stream-admin-layout">
+    <aside class="admin-shell__sidebar">
+          <div class="admin-shell__brand-row">
+            <h1 class="admin-shell__title">Stream Admin</h1>
+          </div>
+          <nav class="admin-shell__nav" aria-label="Admin-Anwendungen" data-open="true">
+            <ul class="admin-shell__nav-list">
+              <li class="admin-shell__nav-item"><a class="admin-shell__nav-link" href="/admin/console/" data-active="false"><span class="admin-shell__item-label">Admin Console</span></a></li>
+              <li class="admin-shell__nav-item"><a class="admin-shell__nav-link" href="/admin/markdown" data-active="false"><span class="admin-shell__item-label">Markdown Overlay</span></a></li>
+              <li class="admin-shell__nav-item"><a class="admin-shell__nav-link" href="/admin/alerts" aria-current="page" data-active="true"><span class="admin-shell__item-label">Alert Overlay</span></a></li>
+              <li class="admin-shell__nav-item"><a class="admin-shell__nav-link" href="/grafana" data-active="false" target="_blank" rel="noopener noreferrer"><span class="admin-shell__item-label">Monitoring</span></a></li>
+            </ul>
+          </nav>
+        </aside>
+      <div class="stream-admin-main is-login">
     <main class="login-panel">
       <h1>Sali-H&uuml;pft Admin</h1>
       <p>Alert WebM-Dateien</p>
@@ -172,6 +188,8 @@ ADMIN_LOGIN_PAGE = """<!doctype html>
         <button type="submit">Login</button>
       </form>
     </main>
+      </div>
+    </div>
   </body>
 </html>
 """
